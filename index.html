@@ -393,11 +393,13 @@ function openWhoModal(){
     ${me()?`<p class="small muted">Logged in as <b>${titleCase(me().n)}</b> (${me().e}) · <span class="link" id="logoutBtn">Logout</span></p>`:''}
     <p class="small muted">Pick yourself from the batch roster — the app will show only <b>your sections + your electives</b>.</p>
     ${sb.html}
-    <div class="row" style="margin-top:12px;justify-content:flex-end"><button id="cancelWho">Cancel</button></div>
+    <div class="row" style="margin-top:12px;justify-content:flex-end">${me()?'<button id="logoutBtn2" style="border-color:var(--bad);color:var(--bad)">Logout</button>':''}<button id="cancelWho">Cancel</button></div>
   </div></div>`;
   sb.wire();
   $('#cancelWho').onclick=()=>$('#modalHost').innerHTML='';
-  const lo=$('#logoutBtn'); if(lo)lo.onclick=()=>{state.me=null;persist();$('#modalHost').innerHTML='';curPerson='me';render();};
+  const doLogout=()=>{state.me=null;persist();$('#modalHost').innerHTML='';curPerson='me';render();toast('Logged out — anyone can now login with their email');};
+  const lo=$('#logoutBtn'); if(lo)lo.onclick=doLogout;
+  const lo2=$('#logoutBtn2'); if(lo2)lo2.onclick=doLogout;
   $('#whoInp').focus();
 }
 
