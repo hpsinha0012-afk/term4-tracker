@@ -238,10 +238,13 @@ function classesFor(date, personId){
     if(pc.code){
       if(!(pc.code in p.c)) return;                       // not enrolled
       const cs=p.c[pc.code];                              // 'A' | 'B' | '' (course not sectioned)
-      if(r.section==='Single Section' || (cs && r.section==='Section '+cs)){
+      if(pc.sess==null){                                  // no session number = exam/special -> common to ALL sections
+        const k='x|'+pc.code+'|'+cell;
+        if(!seen.has(k)){ seen.add(k); out.push({date,slot:si,section:r.section,cell,...pc}); }
+      } else if(r.section==='Single Section' || (cs && r.section==='Section '+cs)){
         out.push({date,slot:si,section:r.section,cell,...pc});
       } else if(!cs && r.section!=='Single Section'){     // unknown section: first occurrence of each session
-        const k=pc.code+'|'+(pc.sess||cell);
+        const k=pc.code+'|'+pc.sess;
         if(!seen.has(k)){ seen.add(k); out.push({date,slot:si,section:r.section,cell,...pc}); }
       }
     } else {
@@ -476,7 +479,8 @@ function dayNavBar(){
     <div class="chip">${curPerson==='me'?'my classes':titleCase(personOf(activePersonId()).n)}</div></div>`;
 }
 function classRow(c,withAtt){
-  const nm=c.code?C[c.code].name:''; const label=c.code?`${c.code}${c.sess?'-'+c.sess:''}`:c.raw;
+  const nm=c.code?C[c.code].name:''; const label=c.code?(c.sess?c.code+'-'+c.sess:c.raw):c.raw;
+  const examTag=(c.code&&!c.sess&&/mid|exam|end\s*term|quiz/i.test(c.raw))?' <span class="tag" style="background:var(--bad);color:#fff">EXAM</span>':'';
   const k=attKey(c.date,c.slot,c.code); const st=state.attendance[k]||'';
   const secTag=c.section==='Single Section'?'<span class="tag">All</span>':'';
   const iso=localISO(); const nowMin=new Date().getHours()*60+new Date().getMinutes();
@@ -487,7 +491,7 @@ function classRow(c,withAtt){
       <button class="ab ${st==='C'?'sel':''}" data-s="C" data-k="${k}">Off</button></div>`:'';
   const learn=(withAtt&&c.code)?`<span class="link" data-learn="${c.date}|${c.code}|${c.sess||''}">+ note</span>`:'';
   return `<div class="cls ${pending?'pending':''}"><div class="info">
-      <div><span class="code">${label}</span> ${secTag} <span class="slot">${SLOTS[c.slot]}</span></div>
+      <div><span class="code">${label}</span>${examTag} ${secTag} <span class="slot">${SLOTS[c.slot]}</span></div>
       <div class="nm">${nm} ${learn}</div></div>${att}</div>`;
 }
 function vToday(){
@@ -522,7 +526,7 @@ function vWeek(){
   SLOTS.forEach((sl,si)=>{
     body+=`<tr><td class="muted small">${sl}</td>`;
     week.forEach(d=>{const cs=classesFor(d,pid).filter(c=>c.slot===si);
-      body+=`<td class="wc">${cs.map(c=>{const lbl=c.code?`${c.code}${c.sess?'-'+c.sess:''}`:c.raw.slice(0,10);const now=(d===iso&&nowMin>=SLOT_MIN[si][0]&&nowMin<SLOT_MIN[si][1]);return `<span class="b ${now?'now':''}">${lbl}</span>`;}).join('')}</td>`;});
+      body+=`<td class="wc">${cs.map(c=>{const lbl=(c.code&&c.sess)?c.code+'-'+c.sess:c.raw.slice(0,14);const now=(d===iso&&nowMin>=SLOT_MIN[si][0]&&nowMin<SLOT_MIN[si][1]);return `<span class="b ${now?'now':''}">${lbl}</span>`;}).join('')}</td>`;});
     body+=`</tr>`;});
   body+=`</tbody></table></div>`;return body;
 }
@@ -576,7 +580,7 @@ function vSubjectDetail(code){
     const note=state.learnings[`${c.date}|${c.code}|${c.sess||''}`]||'';
     const isPast=c.date<iso, isToday=c.date===iso;
     return `<tr style="${isToday?'background:rgba(255,122,26,.08)':''}">
-      <td><b>${code}${c.sess?'-'+c.sess:''}</b>${isToday?' <span class="tag" style="background:var(--orange);color:#2a1400">today</span>':''}</td>
+      <td><b>${c.sess?code+'-'+c.sess:c.cell.replace(/</g,'&lt;')}</b>${isToday?' <span class="tag" style="background:var(--orange);color:#2a1400">today</span>':''}</td>
       <td class="small">${fmt(c.date)}<div class="muted small">${SLOTS[c.slot]}</div></td>
       <td><div class="att-btns">
         <button class="ab ${stt==='P'?'sel':''}" data-s="P" data-k="${k}">P</button>
