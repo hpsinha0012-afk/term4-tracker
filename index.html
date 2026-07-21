@@ -164,17 +164,21 @@ const DB={load(){try{return JSON.parse(localStorage.getItem('t4tracker')||'{}')}
 let state = Object.assign({me:null,target:75,attendance:{},learnings:{},assignments:[],friends:[],reminders:false,liveUrl:'',lastSync:0}, DB.load());
 // migrate old friends format (objects with name/section) -> keep only regId strings
 state.friends = (state.friends||[]).filter(f=>typeof f==='string' && STU[f]);
+// One-time cleanup: remove the friend group that used to auto-load on Hritik's login.
+if(!state.presetPurged){
+  if(state.me==='2025MBA100'){
+    const PRESET=['2025MBA036','2025MBA115','2025MBA028','2025MBA017','2025MBA222','2025MBA180','2025MBA062'];
+    state.friends=state.friends.filter(f=>!PRESET.includes(f));
+  }
+  state.presetPurged=true;
+}
 const DEFAULT_LIVE='https://docs.google.com/spreadsheets/d/1kyLrZ_j2TTeJqiAt4N2W1FkgMXPl_Cwx1RbYXDml4ic/edit';  // Hritik's public mirror (IMPORTRANGE of the official sheet)
 if(!state.liveUrl) state.liveUrl=DEFAULT_LIVE;
 // migrate: the official sheet link can't be fetched anonymously (requires OAuth) — switch to the mirror
 if(state.liveUrl.includes('1E0AaPYJi_sJXar2Wr12Di_0_MW92UdWMOn2BHkuSyUQ')) state.liveUrl=DEFAULT_LIVE;
-// Login sets the profile; Hritik's login also presets his friend group (first time only)
+// Login sets the profile. Friends start empty — each person adds their own from the Friends tab.
 function setMe(id){
   state.me=id;
-  if(id==='2025MBA100'&&!state.initDone){
-    ['2025MBA036','2025MBA115','2025MBA028','2025MBA017','2025MBA222','2025MBA180','2025MBA062']
-      .filter(x=>STU[x]&&!state.friends.includes(x)).forEach(x=>state.friends.push(x));
-  }
   state.initDone=true; persist();
   curPerson='me'; render(); scheduleReminders();
 }
