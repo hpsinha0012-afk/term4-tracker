@@ -196,7 +196,8 @@ function doLogin(){
 // Paste the OAuth Client ID from Google Cloud Console between the quotes.
 // Empty = Google button hidden, app falls back to typed-email login.
 const GOOGLE_CLIENT_ID='';
-const ALLOW_EMAIL_FALLBACK=true;   // false = Google Sign-In is the ONLY way in
+const ALLOW_EMAIL_FALLBACK=false;  // false = Google Sign-In is the ONLY way in
+                                   // (typed-email login still shows while GOOGLE_CLIENT_ID is empty, so the app is never locked shut)
 const COLLEGE_DOMAIN='iimsambalpur.ac.in';
 
 function loginErr(msg){ const er=$('#loginErr'); if(er)er.textContent=msg||''; }
@@ -439,16 +440,20 @@ function studentSearchBox(inputId, resultsId, onPick){
     }
   };
 }
+function strictAuth(){ return !!GOOGLE_CLIENT_ID && !ALLOW_EMAIL_FALLBACK; }
 function openWhoModal(){
-  const sb=studentSearchBox('whoInp','whoRes',id=>{$('#modalHost').innerHTML='';setMe(id);toast('Profile set: '+titleCase(STU[id].n)+' ('+Object.keys(STU[id].c).length+' electives)');});
+  const locked=strictAuth();          // Google-only mode: no picking names, no switching profiles
+  const sb=locked?null:studentSearchBox('whoInp','whoRes',id=>{$('#modalHost').innerHTML='';setMe(id);toast('Profile set: '+titleCase(STU[id].n)+' ('+Object.keys(STU[id].c).length+' electives)');});
   $('#modalHost').innerHTML=`<div class="modal-bg"><div class="modal">
-    <h2>👤 Who are you?</h2>
-    ${me()?`<p class="small muted">Logged in as <b>${titleCase(me().n)}</b> (${me().e}) · <span class="link" id="logoutBtn">Logout</span></p>`:''}
-    <p class="small muted">Pick yourself from the batch roster — the app will show only <b>your sections + your electives</b>.</p>
-    ${sb.html}
+    <h2>👤 ${me()?'Your account':'Who are you?'}</h2>
+    ${me()?`<p class="small muted">Signed in as <b>${titleCase(me().n)}</b><br>${me().e}${state.authVia==='google'?' · verified with Google ✅':''}</p>`:''}
+    ${locked
+      ? (me()?'<p class="small muted">Your profile is linked to this Google account. Log out to switch accounts.</p>'
+            : `<p class="small muted">Sign in with your <b>@${COLLEGE_DOMAIN}</b> Google account to continue.</p>`)
+      : `<p class="small muted">Pick yourself from the batch roster — the app will show only <b>your sections + your electives</b>.</p>${sb.html}`}
     <div class="row" style="margin-top:12px;justify-content:flex-end">${me()?'<button id="logoutBtn2" style="border-color:var(--bad);color:var(--bad)">Logout</button>':''}<button id="cancelWho">Cancel</button></div>
   </div></div>`;
-  sb.wire();
+  if(sb) sb.wire();
   $('#cancelWho').onclick=()=>$('#modalHost').innerHTML='';
   const doLogout=()=>{
     state.me=null; state.authVia=null; state.authEmail=null; persist();
@@ -458,7 +463,7 @@ function openWhoModal(){
   };
   const lo=$('#logoutBtn'); if(lo)lo.onclick=doLogout;
   const lo2=$('#logoutBtn2'); if(lo2)lo2.onclick=doLogout;
-  $('#whoInp').focus();
+  const wi=$('#whoInp'); if(wi)wi.focus();
 }
 
 // ---------- reminders ----------
