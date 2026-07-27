@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#063d70">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <title>Term IV Tracker — MBA 2025-27</title>
 <style>
   :root{
@@ -187,8 +188,53 @@ function doLogin(){
   const v=inp.value.trim().toLowerCase(); if(!v) return;
   let id=Object.keys(STU).find(k=>STU[k].e===v);
   if(!id && !v.includes('@')) id=Object.keys(STU).find(k=>STU[k].e.startsWith(v+'@'));
-  if(id){ setMe(id); toast('👋 Welcome, '+firstName(id)+'!'); }
-  else { const er=$('#loginErr'); if(er)er.textContent='This email is not in the batch roster. Check the spelling, or find your name instead.'; }
+  if(id){ state.authVia='email'; state.authEmail=STU[id].e; setMe(id); toast('👋 Welcome, '+firstName(id)+'!'); }
+  else { loginErr('This email is not in the batch roster. Check the spelling, or find your name instead.'); }
+}
+
+// ---------- Google Sign-In (Google Identity Services) ----------
+// Paste the OAuth Client ID from Google Cloud Console between the quotes.
+// Empty = Google button hidden, app falls back to typed-email login.
+const GOOGLE_CLIENT_ID='';
+const ALLOW_EMAIL_FALLBACK=true;   // false = Google Sign-In is the ONLY way in
+const COLLEGE_DOMAIN='iimsambalpur.ac.in';
+
+function loginErr(msg){ const er=$('#loginErr'); if(er)er.textContent=msg||''; }
+function jwtPayload(cred){
+  try{
+    const b=cred.split('.')[1].replace(/-/g,'+').replace(/_/g,'/');
+    return JSON.parse(decodeURIComponent(atob(b).split('').map(c=>'%'+('00'+c.charCodeAt(0).toString(16)).slice(-2)).join('')));
+  }catch(e){ return null; }
+}
+function onGoogleCredential(resp){
+  const p=resp&&resp.credential?jwtPayload(resp.credential):null;
+  if(!p||!p.email){ loginErr('Could not read your Google account. Try again.'); return; }
+  if(p.email_verified===false){ loginErr('Google could not verify that email address.'); return; }
+  const email=String(p.email).toLowerCase();
+  const id=Object.keys(STU).find(k=>STU[k].e===email);
+  if(!id){
+    loginErr(email+' is not in the MBA 2025-27 batch roster. Sign in with your '+COLLEGE_DOMAIN+' account.');
+    if(window.google&&google.accounts&&google.accounts.id) google.accounts.id.disableAutoSelect();
+    return;
+  }
+  state.authVia='google'; state.authEmail=email; setMe(id);
+  toast('👋 Welcome, '+firstName(id)+'!');
+}
+let gsiTries=0;
+function initGoogle(){
+  if(!GOOGLE_CLIENT_ID) return;
+  const host=$('#gbtn'); if(!host) return;
+  if(!(window.google&&google.accounts&&google.accounts.id)){
+    if(gsiTries++<40) setTimeout(initGoogle,250);   // GIS script still loading
+    else loginErr('Google Sign-In could not load (offline or blocked). Use the email option below.');
+    return;
+  }
+  gsiTries=0;
+  try{
+    google.accounts.id.initialize({client_id:GOOGLE_CLIENT_ID,callback:onGoogleCredential,auto_select:false,cancel_on_tap_outside:true,hd:COLLEGE_DOMAIN});
+    host.innerHTML='';
+    google.accounts.id.renderButton(host,{theme:'filled_blue',size:'large',text:'signin_with',shape:'pill',width:280});
+  }catch(e){ loginErr('Google Sign-In failed to start: '+e.message); }
 }
 function persist(){ localStorage.setItem('t4tracker', JSON.stringify(state)); }
 
@@ -404,7 +450,12 @@ function openWhoModal(){
   </div></div>`;
   sb.wire();
   $('#cancelWho').onclick=()=>$('#modalHost').innerHTML='';
-  const doLogout=()=>{state.me=null;persist();$('#modalHost').innerHTML='';curPerson='me';render();toast('Logged out — anyone can now login with their email');};
+  const doLogout=()=>{
+    state.me=null; state.authVia=null; state.authEmail=null; persist();
+    try{ if(window.google&&google.accounts&&google.accounts.id) google.accounts.id.disableAutoSelect(); }catch(e){}
+    $('#modalHost').innerHTML=''; curPerson='me'; render();
+    toast('Logged out — sign in again to continue');
+  };
   const lo=$('#logoutBtn'); if(lo)lo.onclick=doLogout;
   const lo2=$('#logoutBtn2'); if(lo2)lo2.onclick=doLogout;
   $('#whoInp').focus();
@@ -466,11 +517,15 @@ function vOnboard(){
   return `<div class="card" style="text-align:center;padding:44px 24px;max-width:480px;margin:24px auto">
     <div style="font-size:40px">🏏</div>
     <h2 style="font-size:20px">Term IV Tracker</h2>
-    <p class="muted">Login with your college email — the app shows <b>your</b> schedule,<br>your sections per course, attendance and friends.</p>
-    <input id="loginEmail" type="email" autocomplete="email" autocapitalize="none" placeholder="mba25...@iimsambalpur.ac.in" style="width:100%;max-width:340px;text-align:center;font-size:14px;margin-top:6px">
-    <div id="loginErr" class="small" style="color:var(--bad);margin-top:8px;min-height:16px"></div>
-    <button class="btn-accent" id="loginBtn" style="font-size:15px;padding:10px 28px">Login</button>
-    <div class="small muted" style="margin-top:14px">Email not recognized? <span class="link" id="loginByName">Find your name instead</span></div>
+    <p class="muted">Sign in with your college account — the app shows <b>your</b> schedule,<br>your sections per course, attendance and friends.</p>
+    ${GOOGLE_CLIENT_ID?`<div id="gbtn" style="display:flex;justify-content:center;margin:16px 0 4px;min-height:44px"></div>
+    <div class="small muted">Use your <b>@${COLLEGE_DOMAIN}</b> account</div>`:''}
+    <div id="loginErr" class="small" style="color:var(--bad);margin-top:10px;min-height:16px"></div>
+    ${(ALLOW_EMAIL_FALLBACK||!GOOGLE_CLIENT_ID)?`
+      ${GOOGLE_CLIENT_ID?`<div class="row" style="align-items:center;gap:10px;margin:12px 0"><div style="flex:1;height:1px;background:var(--line)"></div><span class="small muted">or</span><div style="flex:1;height:1px;background:var(--line)"></div></div>`:''}
+      <input id="loginEmail" type="email" autocomplete="email" autocapitalize="none" placeholder="mba25...@${COLLEGE_DOMAIN}" style="width:100%;max-width:340px;text-align:center;font-size:14px;margin-top:6px">
+      <div style="margin-top:10px"><button class="btn-accent" id="loginBtn" style="font-size:15px;padding:10px 28px">Login with email</button></div>
+      <div class="small muted" style="margin-top:14px">Email not recognized? <span class="link" id="loginByName">Find your name instead</span></div>`:''}
   </div>`;
 }
 function dayNavBar(){
@@ -710,6 +765,7 @@ function wire(){
   b('loginBtn',doLogin);
   b('loginByName',()=>openWhoModal());
   const le=$('#loginEmail'); if(le)le.onkeydown=e=>{if(e.key==='Enter')doLogin();};
+  if($('#gbtn')) initGoogle();
   b('addFriendChip',()=>{curTab='friends';render();const i=$('#frInp');if(i)i.focus();});
   const ds=$('#dateSel');if(ds)ds.onchange=e=>{curDate=e.target.value;render();};
   document.querySelectorAll('[data-hf]').forEach(el=>el.onclick=()=>{const x=el.dataset.hf;if(holidayExcl.has(x))holidayExcl.delete(x);else holidayExcl.add(x);render();});
